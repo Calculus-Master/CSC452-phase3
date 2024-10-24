@@ -1,6 +1,5 @@
 *.o
 *.out
-test*
 /.vagrant
 /.idea/
 .vscode/
