@@ -8,7 +8,8 @@
 // Data structures and global variables
 
 typedef struct Semaphore {
-    int id;
+    int in_use;
+    int value;
 } Semaphore;
 
 typedef struct ShadowProcess {
@@ -21,7 +22,41 @@ static ShadowProcess process_table[MAXPROC];
 // Semaphore syscall handlers
 void semaphore_create(USLOSS_Sysargs* args)
 {
+    int value = (int)(long)args->arg1;
 
+    if(value < 0) // Invalid starting value
+    {
+        args->arg1 = -1;
+        args->arg4 = -1;
+    }
+    else
+    {
+        // Search for the first empty semaphore
+        Semaphore* target = NULL;
+        int sid;
+        for(sid = 0; sid < MAXSEMS; sid++)
+        {
+            if(!semaphores[sid].in_use)
+            {
+                target = &semaphores[sid];
+                break;
+            }
+        }
+
+        if(target == NULL) // No free semaphores
+        {
+            args->arg1 = -1;
+            args->arg4 = -1;
+        }
+        else // Initialize semaphore
+        {
+            target->in_use = 1;
+            target->value = value;
+
+            args->arg1 = sid;
+            args->arg4 = 0;
+        }
+    }
 }
 
 void semaphore_v(USLOSS_Sysargs* args)
@@ -83,6 +118,10 @@ void phase3_init()
     memset(process_table, 0, sizeof(process_table));
 
     // Assign syscall handlers
+    systemCallVec[SYS_SEMCREATE] = semaphore_create;
+    systemCallVec[SYS_SEMV] = semaphore_v;
+    systemCallVec[SYS_SEMP] = semaphore_p;
+
     systemCallVec[SYS_SPAWN] = spawn_handler;
     systemCallVec[SYS_WAIT] = wait_handler;
     systemCallVec[SYS_TERMINATE] = terminate_handler;
