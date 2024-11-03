@@ -4,12 +4,14 @@
 #include <phase3.h>
 #include <string.h>
 #include <phase3_usermode.h>
+#include <stdio.h>
 
 // Data structures and global variables
 
 typedef struct Semaphore {
     int in_use;
     int value;
+    int mailbox_id;
 } Semaphore;
 
 typedef struct ShadowProcess {
@@ -18,6 +20,29 @@ typedef struct ShadowProcess {
 
 static Semaphore semaphores[MAXSEMS];
 static ShadowProcess process_table[MAXPROC];
+
+int semaphore_global_mutex; // Mailbox operating as a mutex for all semaphores
+
+// Helpers
+void gain_lock_semaphore_global()
+{
+    MboxSend(semaphore_global_mutex, NULL, 0);
+}
+
+void release_lock_semaphore_global()
+{
+    MboxRecv(semaphore_global_mutex, NULL, 0);
+}
+
+void gain_semaphore_resource(Semaphore* semaphore)
+{
+    MboxSend(semaphore->mailbox_id, NULL, 0);
+}
+
+void release_semaphore_resource(Semaphore* semaphore)
+{
+    MboxRecv(semaphore->mailbox_id, NULL, 0);
+}
 
 // Semaphore syscall handlers
 void semaphore_create(USLOSS_Sysargs* args)
@@ -52,6 +77,7 @@ void semaphore_create(USLOSS_Sysargs* args)
         {
             target->in_use = 1;
             target->value = value;
+            target->mailbox_id = MboxCreate(value, 0);
 
             args->arg1 = sid;
             args->arg4 = 0;
@@ -61,12 +87,42 @@ void semaphore_create(USLOSS_Sysargs* args)
 
 void semaphore_v(USLOSS_Sysargs* args)
 {
+    printf("Attempting to gain mutex lock\n");
+    gain_lock_semaphore_global();
 
+    printf("Gained mutex lock\n");
+
+    int sid = (int)(long)args->arg1;
+    Semaphore* semaphore = &semaphores[sid];
+
+    // Release a semaphore resource - will automatically unblock any mailbox producers if the semaphore is at 0
+    release_semaphore_resource(semaphore);
+
+    // Update counter
+    semaphore->value++;
+
+    release_lock_semaphore_global();
 }
 
 void semaphore_p(USLOSS_Sysargs* args)
 {
+    printf("Attempting to gain mutex lock\n");
+    gain_lock_semaphore_global();
 
+    printf("Gained mutex lock\n");
+
+    int sid = (int)(long)args->arg1;
+    Semaphore* semaphore = &semaphores[sid];
+
+    // Attempt to gain a semaphore resource - will block if the mailbox is full (i.e. semaphore value is 0)
+    printf("Attempting to gain semaphore resource\n");
+    gain_semaphore_resource(semaphore);
+    printf("Gained semaphore resource\n");
+
+    // At this point, semaphore resource is available, so decrement the value and return
+    semaphore->value--;
+
+    release_lock_semaphore_global();
 }
 
 // System call handlers
@@ -74,7 +130,7 @@ void semaphore_p(USLOSS_Sysargs* args)
 void user_process_wrapper(USLOSS_Sysargs* args) // Trampoline function that handles calling the user mode process
 {
     // Enable user mode
-    USLOSS_PsrSet(USLOSS_PsrGet() | ~USLOSS_PSR_CURRENT_MODE);
+    USLOSS_PsrSet(USLOSS_PsrGet() & ~0x1);
 
     // Call user mode function
     int (*user_func)(void*) = (int (*)(void*))args->arg1;
@@ -135,6 +191,9 @@ void phase3_init()
     systemCallVec[SYS_SPAWN] = spawn_handler;
     systemCallVec[SYS_WAIT] = wait_handler;
     systemCallVec[SYS_TERMINATE] = terminate_handler;
+
+    // Mailbox creation
+    semaphore_global_mutex = MboxCreate(1, 0);
 }
 
 void phase3_start_service_processes()
