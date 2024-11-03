@@ -110,6 +110,16 @@ void terminate_handler(USLOSS_Sysargs* args)
 
 }
 
+void get_time_handler(USLOSS_Sysargs* args)
+{
+
+}
+
+void get_pid_handler(USLOSS_Sysargs* args)
+{
+
+}
+
 // Initializes stuff for phase 3
 void phase3_init()
 {
