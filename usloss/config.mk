@@ -1,5 +1,5 @@
 srcdir = .
-prefix = /home/vagrant
+prefix = /root
 exec_prefix =   ${prefix}
 
 AC_FLAGS =              -DHAVE_CONFIG_H

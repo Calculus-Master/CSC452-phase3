@@ -3,7 +3,7 @@ include ../version.mk
 include ../config.mk
 
 srcdir = .
-prefix = /home/vagrant
+prefix = /root
 exec_prefix =   ${prefix}
 
 COBJS = libuser.o

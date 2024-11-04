@@ -8,13 +8,15 @@
 
 // Data structures and global variables
 
-typedef struct Semaphore {
+typedef struct Semaphore
+{
     int in_use;
     int value;
     int mailbox_id;
 } Semaphore;
 
-typedef struct ShadowProcess {
+typedef struct ShadowProcess
+{
 
 } ShadowProcess;
 
@@ -34,22 +36,22 @@ void release_lock_semaphore_global()
     MboxRecv(semaphore_global_mutex, NULL, 0);
 }
 
-void gain_semaphore_resource(Semaphore* semaphore)
+void gain_semaphore_resource(Semaphore *semaphore)
 {
     MboxSend(semaphore->mailbox_id, NULL, 0);
 }
 
-void release_semaphore_resource(Semaphore* semaphore)
+void release_semaphore_resource(Semaphore *semaphore)
 {
     MboxRecv(semaphore->mailbox_id, NULL, 0);
 }
 
 // Semaphore syscall handlers
-void semaphore_create(USLOSS_Sysargs* args)
+void semaphore_create(USLOSS_Sysargs *args)
 {
     int value = (int)(long)args->arg1;
 
-    if(value < 0) // Invalid starting value
+    if (value < 0) // Invalid starting value
     {
         args->arg1 = -1;
         args->arg4 = -1;
@@ -57,18 +59,18 @@ void semaphore_create(USLOSS_Sysargs* args)
     else
     {
         // Search for the first empty semaphore
-        Semaphore* target = NULL;
+        Semaphore *target = NULL;
         int sid;
-        for(sid = 0; sid < MAXSEMS; sid++)
+        for (sid = 0; sid < MAXSEMS; sid++)
         {
-            if(!semaphores[sid].in_use)
+            if (!semaphores[sid].in_use)
             {
                 target = &semaphores[sid];
                 break;
             }
         }
 
-        if(target == NULL) // No free semaphores
+        if (target == NULL) // No free semaphores
         {
             args->arg1 = -1;
             args->arg4 = -1;
@@ -85,7 +87,7 @@ void semaphore_create(USLOSS_Sysargs* args)
     }
 }
 
-void semaphore_v(USLOSS_Sysargs* args)
+void semaphore_v(USLOSS_Sysargs *args)
 {
     printf("Attempting to gain mutex lock\n");
     gain_lock_semaphore_global();
@@ -93,7 +95,7 @@ void semaphore_v(USLOSS_Sysargs* args)
     printf("Gained mutex lock\n");
 
     int sid = (int)(long)args->arg1;
-    Semaphore* semaphore = &semaphores[sid];
+    Semaphore *semaphore = &semaphores[sid];
 
     // Release a semaphore resource - will automatically unblock any mailbox producers if the semaphore is at 0
     release_semaphore_resource(semaphore);
@@ -104,7 +106,7 @@ void semaphore_v(USLOSS_Sysargs* args)
     release_lock_semaphore_global();
 }
 
-void semaphore_p(USLOSS_Sysargs* args)
+void semaphore_p(USLOSS_Sysargs *args)
 {
     printf("Attempting to gain mutex lock\n");
     gain_lock_semaphore_global();
@@ -112,7 +114,7 @@ void semaphore_p(USLOSS_Sysargs* args)
     printf("Gained mutex lock\n");
 
     int sid = (int)(long)args->arg1;
-    Semaphore* semaphore = &semaphores[sid];
+    Semaphore *semaphore = &semaphores[sid];
 
     // Attempt to gain a semaphore resource - will block if the mailbox is full (i.e. semaphore value is 0)
     printf("Attempting to gain semaphore resource\n");
@@ -127,24 +129,24 @@ void semaphore_p(USLOSS_Sysargs* args)
 
 // System call handlers
 
-void user_process_wrapper(USLOSS_Sysargs* args) // Trampoline function that handles calling the user mode process
+void user_process_wrapper(USLOSS_Sysargs *args) // Trampoline function that handles calling the user mode process
 {
     // Enable user mode
     USLOSS_PsrSet(USLOSS_PsrGet() & ~0x1);
 
     // Call user mode function
-    int (*user_func)(void*) = (int (*)(void*))args->arg1;
+    int (*user_func)(void *) = (int (*)(void *))args->arg1;
     int status = user_func(args->arg2);
 
     // Terminate if the above function returns
     Terminate(status);
 }
 
-void spawn_handler(USLOSS_Sysargs* args)
+void spawn_handler(USLOSS_Sysargs *args)
 {
     int pid = spork(args->arg5, user_process_wrapper, args, args->arg3, args->arg4);
 
-    if(pid == -1) // Error creating child
+    if (pid == -1) // Error creating child
     {
         args->arg1 = -1;
         args->arg4 = 0;
@@ -156,24 +158,46 @@ void spawn_handler(USLOSS_Sysargs* args)
     }
 }
 
-void wait_handler(USLOSS_Sysargs* args)
+void wait_handler(USLOSS_Sysargs *args)
 {
+    int pid, status;
+    int result = join(&pid);
 
+    if (result == -2)
+    { // No children
+        args->arg4 = (void *)-2;
+    }
+    else
+    {
+        args->arg1 = (void *)pid;    // PID of cleaned-up process
+        args->arg2 = (void *)status; // Status of cleaned-up process
+        args->arg4 = (void *)0;      // Success
+    }
 }
 
-void terminate_handler(USLOSS_Sysargs* args)
+void terminate_handler(USLOSS_Sysargs *args)
 {
+    int status = (int)args->arg1;
 
+    int pid;
+    while (join(&pid) != -2)
+    {
+        // Wait for all child processes to terminate
+    }
+
+    quit(status); // This function will never return
 }
 
-void get_time_handler(USLOSS_Sysargs* args)
+void get_time_handler(USLOSS_Sysargs *args)
 {
-
+    int currentTimeValue = currentTime();  // Get the current time
+    args->arg1 = (void *)currentTimeValue; // Store it in arg1 for return
 }
 
-void get_pid_handler(USLOSS_Sysargs* args)
+void get_pid_handler(USLOSS_Sysargs *args)
 {
-
+    int pid = getpid();       // Retrieve the current process's PID
+    args->arg1 = (void *)pid; // Store it in arg1 for return
 }
 
 // Initializes stuff for phase 3
@@ -191,6 +215,9 @@ void phase3_init()
     systemCallVec[SYS_SPAWN] = spawn_handler;
     systemCallVec[SYS_WAIT] = wait_handler;
     systemCallVec[SYS_TERMINATE] = terminate_handler;
+
+    systemCallVec[SYS_GETTIMEOFDAY] = get_time_handler;
+    systemCallVec[SYS_GETPID] = get_pid_handler;
 
     // Mailbox creation
     semaphore_global_mutex = MboxCreate(1, 0);
