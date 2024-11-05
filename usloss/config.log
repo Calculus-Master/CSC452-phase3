@@ -27,12 +27,12 @@ uname -v = #1 SMP Debian 5.10.221-1 (2024-07-14)
 /usr/bin/oslevel       = unknown
 /bin/universe          = unknown
 
-PATH: /usr/local/sbin
+PATH: /home/vagrant/.vscode-server/cli/servers/Stable-912bb683695358a54ae0c670461738984cbb5b95/server/bin/remote-cli
 PATH: /usr/local/bin
-PATH: /usr/sbin
 PATH: /usr/bin
-PATH: /sbin
 PATH: /bin
+PATH: /usr/local/games
+PATH: /usr/games
 
 
 ## ----------- ##
@@ -393,7 +393,7 @@ localstatedir='${prefix}/var'
 mandir='${datarootdir}/man'
 oldincludedir='/usr/include'
 pdfdir='${docdir}'
-prefix='/root'
+prefix='/home/vagrant'
 program_transform_name='s,x,x,'
 psdir='${docdir}'
 sbindir='${exec_prefix}/sbin'

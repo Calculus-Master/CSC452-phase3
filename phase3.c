@@ -7,13 +7,12 @@
 #include <stdio.h>
 
 // Data structures and global variables
-
 typedef struct ProcessData
 {
     int (*user_func)(void *);
-    void* user_arg;
+    void *user_arg;
 
-    struct ProcessData* next;
+    struct ProcessData *next;
 } ProcessData;
 
 typedef struct Semaphore
@@ -34,13 +33,13 @@ static ProcessData process_data[MAXPROC];
 // Helpers
 
 // Retrieves the given semaphore's mutex lock
-void gain_semaphore_lock(Semaphore* semaphore)
+void gain_semaphore_lock(Semaphore *semaphore)
 {
     MboxSend(semaphore->mutex_mailbox, NULL, 0);
 }
 
 // Releases the given semaphore's mutex lock
-void release_semaphore_lock(Semaphore* semaphore)
+void release_semaphore_lock(Semaphore *semaphore)
 {
     MboxRecv(semaphore->mutex_mailbox, NULL, 0);
 }
@@ -84,7 +83,7 @@ void semaphore_create(USLOSS_Sysargs *args)
     if (value < 0) // Invalid starting value
     {
         args->arg1 = 0;
-        args->arg4 = -1;
+        args->arg4 = (void *)-1;
     }
     else
     {
@@ -103,7 +102,7 @@ void semaphore_create(USLOSS_Sysargs *args)
         if (target == NULL) // No free semaphores
         {
             args->arg1 = 0;
-            args->arg4 = -1;
+            args->arg4 = (void *)-1;
         }
         else // Initialize semaphore
         {
@@ -115,7 +114,7 @@ void semaphore_create(USLOSS_Sysargs *args)
 
             target->num_waiting = 0;
 
-            args->arg1 = sid;
+            args->arg1 = (void *)(long)sid;
             args->arg4 = 0;
         }
     }
@@ -134,7 +133,8 @@ void semaphore_v(USLOSS_Sysargs *args)
     semaphore->value++;
 
     // If any processes were blocked & waiting, then free one
-    if(semaphore->num_waiting > 0) free_resource(semaphore);
+    if (semaphore->num_waiting > 0)
+        free_resource(semaphore);
 
     // Release the semaphore's mutex lock
     release_semaphore_lock(semaphore);
@@ -152,7 +152,7 @@ void semaphore_p(USLOSS_Sysargs *args)
     int did_block = 0;
 
     // If no resources, initiate the blocking sequence
-    if(semaphore->value <= 0)
+    if (semaphore->value <= 0)
     {
         // Update flags while holding the global semaphore mutex lock
         semaphore->num_waiting++;
@@ -170,7 +170,8 @@ void semaphore_p(USLOSS_Sysargs *args)
 
     // At this point, semaphore resource is available, so decrement the value and release the global mutex
     semaphore->value--;
-    if(did_block) semaphore->num_waiting--; // If it did block, then remove from the blocked counter
+    if (did_block)
+        semaphore->num_waiting--; // If it did block, then remove from the blocked counter
     release_semaphore_lock(semaphore);
 }
 
@@ -186,7 +187,7 @@ void user_process_wrapper()
     USLOSS_PsrSet(USLOSS_PsrGet() & ~0x1);
 
     // Call user mode function
-    ProcessData* data = &process_data[getpid() % MAXPROC];
+    ProcessData *data = &process_data[getpid() % MAXPROC];
     int status = data->user_func(data->user_arg);
 
     // Terminate if the above function returns
@@ -197,10 +198,10 @@ void user_process_wrapper()
 void spawn_handler(USLOSS_Sysargs *args)
 {
     // Spork process using the trampoline function instead
-    int pid = spork(args->arg5, user_process_wrapper, NULL, args->arg3, args->arg4);
+    int pid = spork(args->arg5, (int (*)(void *))user_process_wrapper, NULL, (long)args->arg3, (long)args->arg4);
 
     // Store the necessary data the trampoline function will need
-    ProcessData* data = &process_data[pid % MAXPROC];
+    ProcessData *data = &process_data[pid % MAXPROC];
     memset(data, 0, sizeof(ProcessData));
     data->user_func = args->arg1;
     data->user_arg = args->arg2;
@@ -208,12 +209,12 @@ void spawn_handler(USLOSS_Sysargs *args)
     // Return args
     if (pid == -1) // Error creating child
     {
-        args->arg1 = -1;
+        args->arg1 = (void *)-1;
         args->arg4 = 0;
     }
     else
     {
-        args->arg1 = pid;
+        args->arg1 = (void *)(long)pid;
         args->arg4 = 0;
     }
 
@@ -230,13 +231,13 @@ void wait_handler(USLOSS_Sysargs *args)
 
     if (pid == -2) // No children
     {
-        args->arg4 = -2;
+        args->arg4 = (void *)-2;
     }
     else
     {
-        args->arg1 = pid;    // PID of cleaned-up process
-        args->arg2 = status; // Status of cleaned-up process
-        args->arg4 = 0;      // Success
+        args->arg1 = (void *)(long)pid;    // PID of cleaned-up process
+        args->arg2 = (void *)(long)status; // Status of cleaned-up process
+        args->arg4 = 0;                    // Success
     }
 }
 
@@ -257,15 +258,15 @@ void terminate_handler(USLOSS_Sysargs *args)
 // Handles the get_time syscall
 void get_time_handler(USLOSS_Sysargs *args)
 {
-    int currentTimeValue = currentTime();  // Get the current time
-    args->arg1 = currentTimeValue; // Store it in arg1 for return
+    int currentTimeValue = currentTime();        // Get the current time
+    args->arg1 = (void *)(long)currentTimeValue; // Store it in arg1 for return
 }
 
 // Handles the get_pid syscall
 void get_pid_handler(USLOSS_Sysargs *args)
 {
-    int pid = getpid();       // Retrieve the current process's PID
-    args->arg1 = pid; // Store it in arg1 for return
+    int pid = getpid();             // Retrieve the current process's PID
+    args->arg1 = (void *)(long)pid; // Store it in arg1 for return
 }
 
 // Initializes stuff for phase 3
@@ -289,7 +290,7 @@ void phase3_init()
     systemCallVec[SYS_GETPID] = get_pid_handler;
 
     // Create the single-slot mailboxes for all processes, for the Spawn <-> trampoline wrapper interaction
-    for(int i = 0; i < MAXPROC; i++)
+    for (int i = 0; i < MAXPROC; i++)
         process_mailboxes[i] = MboxCreate(1, 0);
 }
 

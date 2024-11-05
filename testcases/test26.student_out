@@ -6,8 +6,8 @@ start3(): spawned the Child2 process 5
 start3(): spawned the low-priority process 6
 Child1(): Semaphore 0 created.  I will now call V on it 250000 times.
 Child2(): Semaphore 1 created.  I will now call V on it 250000 times.
-Child2(): V operations completed.  I will now call P on the semaphore the same number of times.
 Child1(): V operations completed.  I will now call P on the semaphore the same number of times.
+Child2(): V operations completed.  I will now call P on the semaphore the same number of times.
 Child2(): P operations completed.  I will now call P once more; this will force the process to block, until the Low-Priority Child is able to give us one more V operation.
 Child1(): P operations completed.  I will now call P once more; this will force the process to block, until the Low-Priority Child is able to give us one more V operation.
 LP_Child(): The low-priority child is finally running.  This must not happen until both Child1,Child2 have blocked on their last P operation.
