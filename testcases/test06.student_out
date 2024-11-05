@@ -6,7 +6,6 @@ Child1(): starting, P'ing semaphore
 start3(): after spawn of 4
 start3(): calling Spawn for Child2
 Child2(): starting, V'ing semaphore
-Value is now 1
 Child2(): done
 Child1(): done
 start3(): after spawn of 5

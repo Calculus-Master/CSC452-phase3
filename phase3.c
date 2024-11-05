@@ -32,11 +32,14 @@ static int process_mailboxes[MAXPROC];
 static ProcessData process_data[MAXPROC];
 
 // Helpers
+
+// Retrieves the given semaphore's mutex lock
 void gain_semaphore_lock(Semaphore* semaphore)
 {
     MboxSend(semaphore->mutex_mailbox, NULL, 0);
 }
 
+// Releases the given semaphore's mutex lock
 void release_semaphore_lock(Semaphore* semaphore)
 {
     MboxRecv(semaphore->mutex_mailbox, NULL, 0);
@@ -73,6 +76,8 @@ void free_resource(Semaphore *semaphore)
 }
 
 // Semaphore syscall handlers
+
+// Creates a new Semaphore with given arguments
 void semaphore_create(USLOSS_Sysargs *args)
 {
     int value = (int)(long)args->arg1;
@@ -117,6 +122,7 @@ void semaphore_create(USLOSS_Sysargs *args)
     }
 }
 
+// Performs the Semaphore V operation
 void semaphore_v(USLOSS_Sysargs *args)
 {
     int sid = (int)(long)args->arg1;
@@ -126,14 +132,16 @@ void semaphore_v(USLOSS_Sysargs *args)
     gain_semaphore_lock(semaphore);
 
     // Release a semaphore resource (increment the value)
-    // May also free a blocked process that was waiting for a resource
     semaphore->value++;
+
+    // If any processes were blocked & waiting, then free one
     if(semaphore->num_waiting > 0) free_resource(semaphore);
 
     // Release the semaphore's mutex lock
     release_semaphore_lock(semaphore);
 }
 
+// Performs the Semaphore P operation
 void semaphore_p(USLOSS_Sysargs *args)
 {
     int sid = (int)(long)args->arg1;
@@ -143,13 +151,18 @@ void semaphore_p(USLOSS_Sysargs *args)
     gain_semaphore_lock(semaphore);
 
     int did_block = 0;
-    // If there are no semaphore resources, release the mutex (avoid deadlock) and block, waiting for a resource
-    // SemV will unblock this process when a resource is available
+
+    // If no resources, initiate the blocking sequence
     if(semaphore->value <= 0)
     {
-        release_semaphore_lock(semaphore);
+        // Update flags while holding the global semaphore mutex lock
         semaphore->num_waiting++;
         did_block = 1;
+
+        // Release the mutex to avoid deadlock
+        release_semaphore_lock(semaphore);
+
+        // Block the current process, waiting for a semaphore resource to become available
         wait_resource(semaphore);
 
         // Regain the global semaphore mutex lock after returning, prior to modifying the semaphore value
@@ -158,15 +171,16 @@ void semaphore_p(USLOSS_Sysargs *args)
 
     // At this point, semaphore resource is available, so decrement the value and release the global mutex
     semaphore->value--;
-    if(did_block) semaphore->num_waiting--;
+    if(did_block) semaphore->num_waiting--; // If it did block, then remove from the blocked counter
     release_semaphore_lock(semaphore);
 }
 
 // System call handlers
 
-void user_process_wrapper() // Trampoline function that handles calling the user mode process
+// Trampoline function that handles calling the user mode process
+void user_process_wrapper()
 {
-    // Wait for the caller Spawn to complete its work and release the lock
+    // Block (wait to gain lock) here until the parent Spawn syscall that sporked this wrapper is finished
     gain_process_lock();
 
     // Enable user mode
@@ -180,8 +194,10 @@ void user_process_wrapper() // Trampoline function that handles calling the user
     Terminate(status);
 }
 
+// Handles the spawn syscall
 void spawn_handler(USLOSS_Sysargs *args)
 {
+    // Spork process using the trampoline function instead
     int pid = spork(args->arg5, user_process_wrapper, NULL, args->arg3, args->arg4);
 
     // Store the necessary data the trampoline function will need
@@ -202,12 +218,14 @@ void spawn_handler(USLOSS_Sysargs *args)
         args->arg4 = 0;
     }
 
-    // Allow trampoline function to wake up before the syscall handler returns
+    // Allow trampoline function to wake up before the syscall handler returns, since the syscall has finished its work
     release_process_lock(pid);
 }
 
+// Handles the wait syscall
 void wait_handler(USLOSS_Sysargs *args)
 {
+    // Call join
     int status = 0;
     int pid = join(&status);
 
@@ -223,9 +241,10 @@ void wait_handler(USLOSS_Sysargs *args)
     }
 }
 
+// Handles the terminate syscall
 void terminate_handler(USLOSS_Sysargs *args)
 {
-    int status = (int)args->arg1;
+    int status = (int)(long)args->arg1;
 
     int pid;
     while (join(&pid) != -2)
@@ -236,22 +255,24 @@ void terminate_handler(USLOSS_Sysargs *args)
     quit(status); // This function will never return
 }
 
+// Handles the get_time syscall
 void get_time_handler(USLOSS_Sysargs *args)
 {
     int currentTimeValue = currentTime();  // Get the current time
-    args->arg1 = (void *)currentTimeValue; // Store it in arg1 for return
+    args->arg1 = currentTimeValue; // Store it in arg1 for return
 }
 
+// Handles the get_pid syscall
 void get_pid_handler(USLOSS_Sysargs *args)
 {
     int pid = getpid();       // Retrieve the current process's PID
-    args->arg1 = (void *)pid; // Store it in arg1 for return
+    args->arg1 = pid; // Store it in arg1 for return
 }
 
 // Initializes stuff for phase 3
 void phase3_init()
 {
-    // Clear out shadow process table and semaphores
+    // Clear out arrays of semaphores, mailboxes for trampoline mutex, and process data
     memset(semaphores, 0, sizeof(semaphores));
     memset(process_mailboxes, 0, sizeof(process_mailboxes));
     memset(process_data, 0, sizeof(process_data));
@@ -268,8 +289,8 @@ void phase3_init()
     systemCallVec[SYS_GETTIMEOFDAY] = get_time_handler;
     systemCallVec[SYS_GETPID] = get_pid_handler;
 
-    // Mailbox creation
-    for(int i = 0; i < MAXPROC; i++) // Create the single-slot mailboxes for all processes, for the Spawn-wrapper interaction
+    // Create the single-slot mailboxes for all processes, for the Spawn <-> trampoline wrapper interaction
+    for(int i = 0; i < MAXPROC; i++)
         process_mailboxes[i] = MboxCreate(1, 0);
 }
 
