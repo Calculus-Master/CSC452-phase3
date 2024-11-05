@@ -8,7 +8,10 @@ Child1c(): starting, P'ing semaphore
 start3(): after spawn of 4 5 6
 start3(): calling Spawn for Child2
 Child2(): 7 starting, V'ing semaphore
-Child2(): done
 Child1a(): done
+Child1b(): done
+Child2(): done
+Child1c(): done
 start3(): after spawn of 7
 start3(): Parent done. Calling Terminate.
+finish(): The simulation is now terminating.

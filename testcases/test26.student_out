@@ -1,0 +1,9 @@
+phase4_start_service_processes() called -- currently a NOP
+phase5_start_service_processes() called -- currently a NOP
+start3(): started
+start3(): spawned the Child1 process 4
+start3(): spawned the Child2 process 5
+start3(): spawned the low-priority process 6
+Child1(): Semaphore 0 created.  I will now call V on it 250000 times.
+Child2(): Semaphore 1 created.  I will now call V on it 250000 times.
+LP_Child(): The low-priority child is finally running.  This must not happen until both Child1,Child2 have blocked on their last P operation.

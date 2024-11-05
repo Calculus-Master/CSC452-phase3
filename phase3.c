@@ -65,7 +65,7 @@ void wait_resource(Semaphore *semaphore)
 // Uses MboxCondRecv because SemV is not supposed to block
 void free_resource(Semaphore *semaphore)
 {
-    MboxCondRecv(semaphore->mailbox_id, NULL, 0);
+    MboxRecv(semaphore->mailbox_id, NULL, 0);
 }
 
 // Semaphore syscall handlers

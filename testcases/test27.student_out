@@ -1,0 +1,54 @@
+phase4_start_service_processes() called -- currently a NOP
+phase5_start_service_processes() called -- currently a NOP
+start3(): started
+start3(): spawned process  4 : i= 0 PRIMES[i]= 2
+start3(): spawned process  5 : i= 1 PRIMES[i]= 3
+start3(): spawned process  6 : i= 2 PRIMES[i]= 5
+start3(): spawned process  7 : i= 3 PRIMES[i]= 7
+start3(): spawned process  8 : i= 4 PRIMES[i]=11
+start3(): spawned process  9 : i= 5 PRIMES[i]=13
+start3(): spawned process 10 : i= 6 PRIMES[i]=17
+start3(): spawned process 11 : i= 7 PRIMES[i]=19
+start3(): spawned process 12 : i= 8 PRIMES[i]=23
+start3(): spawned process 13 : i= 9 PRIMES[i]=29
+start3(): spawned process 14 : i=10 PRIMES[i]=31
+start3(): spawned process 15 : i=11 PRIMES[i]=37
+start3(): spawned process 16 : i=12 PRIMES[i]=41
+start3(): spawned process 17 : i=13 PRIMES[i]=43
+start3(): spawned process 18 : i=14 PRIMES[i]=47
+start3(): spawned process 19 : i=15 PRIMES[i]=53
+start3(): spawned process 20 : i=16 PRIMES[i]=59
+start3(): spawned process 21 : i=17 PRIMES[i]=61
+start3(): spawned process 22 : i=18 PRIMES[i]=67
+start3(): spawned process 23 : i=19 PRIMES[i]=71
+start3(): spawned process 24 : i=20 PRIMES[i]=73
+start3(): spawned process 25 : i=21 PRIMES[i]=79
+start3(): spawned process 26 : i=22 PRIMES[i]=83
+start3(): spawned process 27 : i=23 PRIMES[i]=89
+start3(): spawned process 28 : i=24 PRIMES[i]=97
+start3(): Waking up semaphore[0], with counter=2
+worker 0 : started : PRIMES[arg]=2
+worker 1 : started : PRIMES[arg]=3
+worker 2 : started : PRIMES[arg]=5
+worker 3 : started : PRIMES[arg]=7
+worker 4 : started : PRIMES[arg]=11
+worker 5 : started : PRIMES[arg]=13
+worker 6 : started : PRIMES[arg]=17
+worker 7 : started : PRIMES[arg]=19
+worker 8 : started : PRIMES[arg]=23
+worker 9 : started : PRIMES[arg]=29
+worker 10 : started : PRIMES[arg]=31
+worker 11 : started : PRIMES[arg]=37
+worker 12 : started : PRIMES[arg]=41
+worker 13 : started : PRIMES[arg]=43
+worker 14 : started : PRIMES[arg]=47
+worker 15 : started : PRIMES[arg]=53
+worker 16 : started : PRIMES[arg]=59
+worker 17 : started : PRIMES[arg]=61
+worker 18 : started : PRIMES[arg]=67
+worker 19 : started : PRIMES[arg]=71
+worker 20 : started : PRIMES[arg]=73
+worker 21 : started : PRIMES[arg]=79
+worker 22 : started : PRIMES[arg]=83
+worker 23 : started : PRIMES[arg]=89
+worker 24 : started : PRIMES[arg]=97
