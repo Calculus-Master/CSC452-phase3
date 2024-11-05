@@ -69,7 +69,6 @@ void wait_resource(Semaphore *semaphore)
 
 // Frees a resource in the Semaphore
 // MboxRecv removes a process from the producer queue if there is one
-// Uses MboxCondRecv because SemV is not supposed to block
 void free_resource(Semaphore *semaphore)
 {
     MboxRecv(semaphore->waiting_mailbox, NULL, 0);
