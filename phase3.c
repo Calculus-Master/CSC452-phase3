@@ -15,13 +15,15 @@ typedef struct Semaphore
     int mailbox_id;
 } Semaphore;
 
-typedef struct ShadowProcess
+typedef struct ProcessData
 {
-
-} ShadowProcess;
+    int (*user_func)(void *);
+    void* user_arg;
+} ProcessData;
 
 static Semaphore semaphores[MAXSEMS];
-static ShadowProcess process_table[MAXPROC];
+static int process_mailboxes[MAXPROC];
+static ProcessData process_data[MAXPROC];
 
 int semaphore_global_mutex; // Mailbox operating as a mutex for all semaphores
 
@@ -34,6 +36,21 @@ void gain_lock_semaphore_global()
 void release_lock_semaphore_global()
 {
     MboxRecv(semaphore_global_mutex, NULL, 0);
+}
+
+// Called by the trampoline - waits until Spawn releases the lock before waking up
+void gain_process_lock()
+{
+    int mbox = process_mailboxes[getpid() % MAXPROC];
+    MboxRecv(mbox, NULL, 0);
+}
+
+// Called by Spawn - wakes up the trampoline function after Spawn's work is done
+// Uses CondSend since otherwise it would block (due to the zero slot mailboxes being used)
+void release_process_lock(int pid)
+{
+    int mbox = process_mailboxes[pid % MAXPROC];
+    MboxCondSend(mbox, NULL, 0);
 }
 
 void gain_semaphore_resource(Semaphore *semaphore)
@@ -129,14 +146,17 @@ void semaphore_p(USLOSS_Sysargs *args)
 
 // System call handlers
 
-void user_process_wrapper(USLOSS_Sysargs *args) // Trampoline function that handles calling the user mode process
+void user_process_wrapper() // Trampoline function that handles calling the user mode process
 {
+    // Wait for the caller Spawn to complete its work and release the lock
+    gain_process_lock();
+
     // Enable user mode
     USLOSS_PsrSet(USLOSS_PsrGet() & ~0x1);
 
     // Call user mode function
-    int (*user_func)(void *) = (int (*)(void *))args->arg1;
-    int status = user_func(args->arg2);
+    ProcessData* data = &process_data[getpid() % MAXPROC];
+    int status = data->user_func(data->user_arg);
 
     // Terminate if the above function returns
     Terminate(status);
@@ -144,8 +164,15 @@ void user_process_wrapper(USLOSS_Sysargs *args) // Trampoline function that hand
 
 void spawn_handler(USLOSS_Sysargs *args)
 {
-    int pid = spork(args->arg5, user_process_wrapper, args, args->arg3, args->arg4);
+    int pid = spork(args->arg5, user_process_wrapper, NULL, args->arg3, args->arg4);
 
+    // Store the necessary data the trampoline function will need
+    ProcessData* data = &process_data[pid % MAXPROC];
+    memset(data, 0, sizeof(ProcessData));
+    data->user_func = args->arg1;
+    data->user_arg = args->arg2;
+
+    // Return args
     if (pid == -1) // Error creating child
     {
         args->arg1 = -1;
@@ -156,22 +183,25 @@ void spawn_handler(USLOSS_Sysargs *args)
         args->arg1 = pid;
         args->arg4 = 0;
     }
+
+    // Allow trampoline function to wake up before the syscall handler returns
+    release_process_lock(pid);
 }
 
 void wait_handler(USLOSS_Sysargs *args)
 {
-    int pid, status;
-    int result = join(&pid);
+    int status = 0;
+    int pid = join(&status);
 
-    if (result == -2)
-    { // No children
-        args->arg4 = (void *)-2;
+    if (pid == -2) // No children
+    {
+        args->arg4 = -2;
     }
     else
     {
-        args->arg1 = (void *)pid;    // PID of cleaned-up process
-        args->arg2 = (void *)status; // Status of cleaned-up process
-        args->arg4 = (void *)0;      // Success
+        args->arg1 = pid;    // PID of cleaned-up process
+        args->arg2 = status; // Status of cleaned-up process
+        args->arg4 = 0;      // Success
     }
 }
 
@@ -205,7 +235,8 @@ void phase3_init()
 {
     // Clear out shadow process table and semaphores
     memset(semaphores, 0, sizeof(semaphores));
-    memset(process_table, 0, sizeof(process_table));
+    memset(process_mailboxes, 0, sizeof(process_mailboxes));
+    memset(process_data, 0, sizeof(process_data));
 
     // Assign syscall handlers
     systemCallVec[SYS_SEMCREATE] = semaphore_create;
@@ -221,6 +252,9 @@ void phase3_init()
 
     // Mailbox creation
     semaphore_global_mutex = MboxCreate(1, 0);
+
+    for(int i = 0; i < MAXPROC; i++) // Create the zero-slot mailboxes for all processes, for the Spawn-wrapper interaction
+        process_mailboxes[i] = MboxCreate(1, 0);
 }
 
 void phase3_start_service_processes()
