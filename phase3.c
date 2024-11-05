@@ -53,14 +53,19 @@ void release_process_lock(int pid)
     MboxCondSend(mbox, NULL, 0);
 }
 
-void gain_semaphore_resource(Semaphore *semaphore)
+// Blocks the current process until a resource is available in the Semaphore
+// MboxSend adds process to producer queue
+void wait_resource(Semaphore *semaphore)
 {
     MboxSend(semaphore->mailbox_id, NULL, 0);
 }
 
-void release_semaphore_resource(Semaphore *semaphore)
+// Frees a resource in the Semaphore
+// MboxRecv removes a process from the producer queue if there is one
+// Uses MboxCondRecv because SemV is not supposed to block
+void free_resource(Semaphore *semaphore)
 {
-    MboxRecv(semaphore->mailbox_id, NULL, 0);
+    MboxCondRecv(semaphore->mailbox_id, NULL, 0);
 }
 
 // Semaphore syscall handlers
@@ -70,7 +75,7 @@ void semaphore_create(USLOSS_Sysargs *args)
 
     if (value < 0) // Invalid starting value
     {
-        args->arg1 = -1;
+        args->arg1 = 0;
         args->arg4 = -1;
     }
     else
@@ -89,7 +94,7 @@ void semaphore_create(USLOSS_Sysargs *args)
 
         if (target == NULL) // No free semaphores
         {
-            args->arg1 = -1;
+            args->arg1 = 0;
             args->arg4 = -1;
         }
         else // Initialize semaphore
@@ -106,41 +111,42 @@ void semaphore_create(USLOSS_Sysargs *args)
 
 void semaphore_v(USLOSS_Sysargs *args)
 {
-    printf("Attempting to gain mutex lock\n");
+    // Gain the global semaphore mutex lock
     gain_lock_semaphore_global();
-
-    printf("Gained mutex lock\n");
 
     int sid = (int)(long)args->arg1;
     Semaphore *semaphore = &semaphores[sid];
 
-    // Release a semaphore resource - will automatically unblock any mailbox producers if the semaphore is at 0
-    release_semaphore_resource(semaphore);
-
-    // Update counter
+    // Release a semaphore resource (increment the value)
+    // May also free a blocked process that was waiting for a resource
     semaphore->value++;
+    free_resource(semaphore);
 
+    // Release the global semaphore mutex lock
     release_lock_semaphore_global();
 }
 
 void semaphore_p(USLOSS_Sysargs *args)
 {
-    printf("Attempting to gain mutex lock\n");
+    // Gain the global semaphore mutex lock
     gain_lock_semaphore_global();
-
-    printf("Gained mutex lock\n");
 
     int sid = (int)(long)args->arg1;
     Semaphore *semaphore = &semaphores[sid];
 
-    // Attempt to gain a semaphore resource - will block if the mailbox is full (i.e. semaphore value is 0)
-    printf("Attempting to gain semaphore resource\n");
-    gain_semaphore_resource(semaphore);
-    printf("Gained semaphore resource\n");
+    // If there are no semaphore resources, release the mutex (avoid deadlock) and block, waiting for a resource
+    // SemV will unblock this process when a resource is available
+    if(semaphore->value <= 0)
+    {
+        release_lock_semaphore_global();
+        wait_resource(semaphore);
 
-    // At this point, semaphore resource is available, so decrement the value and return
+        // Regain the global semaphore mutex lock after returning, prior to modifying the semaphore value
+        gain_lock_semaphore_global();
+    }
+
+    // At this point, semaphore resource is available, so decrement the value and release the global mutex
     semaphore->value--;
-
     release_lock_semaphore_global();
 }
 
