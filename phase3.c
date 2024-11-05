@@ -8,34 +8,38 @@
 
 // Data structures and global variables
 
-typedef struct Semaphore
-{
-    int in_use;
-    int value;
-    int mailbox_id;
-} Semaphore;
-
 typedef struct ProcessData
 {
     int (*user_func)(void *);
     void* user_arg;
+
+    struct ProcessData* next;
 } ProcessData;
+
+typedef struct Semaphore
+{
+    int in_use;
+    int value;
+
+    int mutex_mailbox;
+    int waiting_mailbox;
+
+    int num_waiting;
+} Semaphore;
 
 static Semaphore semaphores[MAXSEMS];
 static int process_mailboxes[MAXPROC];
 static ProcessData process_data[MAXPROC];
 
-int semaphore_global_mutex; // Mailbox operating as a mutex for all semaphores
-
 // Helpers
-void gain_lock_semaphore_global()
+void gain_semaphore_lock(Semaphore* semaphore)
 {
-    MboxSend(semaphore_global_mutex, NULL, 0);
+    MboxSend(semaphore->mutex_mailbox, NULL, 0);
 }
 
-void release_lock_semaphore_global()
+void release_semaphore_lock(Semaphore* semaphore)
 {
-    MboxRecv(semaphore_global_mutex, NULL, 0);
+    MboxRecv(semaphore->mutex_mailbox, NULL, 0);
 }
 
 // Called by the trampoline - waits until Spawn releases the lock before waking up
@@ -57,7 +61,7 @@ void release_process_lock(int pid)
 // MboxSend adds process to producer queue
 void wait_resource(Semaphore *semaphore)
 {
-    MboxSend(semaphore->mailbox_id, NULL, 0);
+    MboxSend(semaphore->waiting_mailbox, NULL, 0);
 }
 
 // Frees a resource in the Semaphore
@@ -65,7 +69,7 @@ void wait_resource(Semaphore *semaphore)
 // Uses MboxCondRecv because SemV is not supposed to block
 void free_resource(Semaphore *semaphore)
 {
-    MboxRecv(semaphore->mailbox_id, NULL, 0);
+    MboxRecv(semaphore->waiting_mailbox, NULL, 0);
 }
 
 // Semaphore syscall handlers
@@ -101,7 +105,11 @@ void semaphore_create(USLOSS_Sysargs *args)
         {
             target->in_use = 1;
             target->value = value;
-            target->mailbox_id = MboxCreate(value, 0);
+
+            target->mutex_mailbox = MboxCreate(1, 0);
+            target->waiting_mailbox = MboxCreate(value, 0);
+
+            target->num_waiting = 0;
 
             args->arg1 = sid;
             args->arg4 = 0;
@@ -111,43 +119,47 @@ void semaphore_create(USLOSS_Sysargs *args)
 
 void semaphore_v(USLOSS_Sysargs *args)
 {
-    // Gain the global semaphore mutex lock
-    gain_lock_semaphore_global();
-
     int sid = (int)(long)args->arg1;
     Semaphore *semaphore = &semaphores[sid];
+
+    // Gain the semaphore's mutex lock prior to modifying the semaphore value
+    gain_semaphore_lock(semaphore);
 
     // Release a semaphore resource (increment the value)
     // May also free a blocked process that was waiting for a resource
     semaphore->value++;
-    free_resource(semaphore);
+    if(semaphore->num_waiting > 0) free_resource(semaphore);
 
-    // Release the global semaphore mutex lock
-    release_lock_semaphore_global();
+    // Release the semaphore's mutex lock
+    release_semaphore_lock(semaphore);
 }
 
 void semaphore_p(USLOSS_Sysargs *args)
 {
-    // Gain the global semaphore mutex lock
-    gain_lock_semaphore_global();
-
     int sid = (int)(long)args->arg1;
     Semaphore *semaphore = &semaphores[sid];
 
+    // Gain the semaphore's mutex lock prior to modifying the semaphore value
+    gain_semaphore_lock(semaphore);
+
+    int did_block = 0;
     // If there are no semaphore resources, release the mutex (avoid deadlock) and block, waiting for a resource
     // SemV will unblock this process when a resource is available
     if(semaphore->value <= 0)
     {
-        release_lock_semaphore_global();
+        release_semaphore_lock(semaphore);
+        semaphore->num_waiting++;
+        did_block = 1;
         wait_resource(semaphore);
 
         // Regain the global semaphore mutex lock after returning, prior to modifying the semaphore value
-        gain_lock_semaphore_global();
+        gain_semaphore_lock(semaphore);
     }
 
     // At this point, semaphore resource is available, so decrement the value and release the global mutex
     semaphore->value--;
-    release_lock_semaphore_global();
+    if(did_block) semaphore->num_waiting--;
+    release_semaphore_lock(semaphore);
 }
 
 // System call handlers
@@ -257,9 +269,7 @@ void phase3_init()
     systemCallVec[SYS_GETPID] = get_pid_handler;
 
     // Mailbox creation
-    semaphore_global_mutex = MboxCreate(1, 0);
-
-    for(int i = 0; i < MAXPROC; i++) // Create the zero-slot mailboxes for all processes, for the Spawn-wrapper interaction
+    for(int i = 0; i < MAXPROC; i++) // Create the single-slot mailboxes for all processes, for the Spawn-wrapper interaction
         process_mailboxes[i] = MboxCreate(1, 0);
 }
 

@@ -8,8 +8,11 @@ Child1c(): starting, P'ing semaphore
 start3(): after spawn of 4 5 6
 start3(): calling Spawn for Child2
 Child2(): 7 starting, V'ing semaphore
+Value is now 1
+Value is now 2
 Child1a(): done
 Child1b(): done
+Value is now 1
 Child2(): done
 Child1c(): done
 start3(): after spawn of 7

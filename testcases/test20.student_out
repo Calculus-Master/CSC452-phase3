@@ -12,8 +12,21 @@ Child1(): After P attempt #4
 Child1(): done
 start3(): spawn 4
 start3(): spawn 5
+Value is now -2
 start3(): After V -- may appear before: Child1(): After P attempt #3
 start3(): status of quit child = 9
 Child2(): starting
+Value is now -1
 Child2(): After V attempt #0
+Value is now 0
 Child2(): After V attempt #1
+Value is now 1
+Child2(): After V attempt #2
+Value is now 2
+Child2(): After V attempt #3
+Value is now 3
+Child2(): After V attempt #4
+Child2(): done
+start3(): status of quit child = 10
+start3(): Parent done
+finish(): The simulation is now terminating.
